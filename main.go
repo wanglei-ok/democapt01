@@ -1,10 +1,10 @@
 package main
 
 /*
-#cgo CFLAGS: -I./hksdk/include/
-#cgo LDFLAGS: -L./hksdk/lib/ -lHCCore -lHCNetSDK
+#cgo CFLAGS: -I./hksdk/linux/include/
+#cgo LDFLAGS: -L./hksdk/linux/lib/ -lHCCore -lhcnetsdk
 
-#include "GoWin.h"
+#include "hksdk.h"
 */
 import "C"
 import (
