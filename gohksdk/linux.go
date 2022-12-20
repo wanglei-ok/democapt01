@@ -13,11 +13,11 @@ import (
 	"fmt"
 )
 
-func CapturePicture(channel, port int, ip, username, passwd, saveFile string) {
+func CapturePicture(channel, port int, ip, username, passwd, saveFile string) int {
 	ret := C.NET_DVR_Init()
 	if int(ret) != 1 {
 		fmt.Printf("NET_DVR_Init failed error code = %v\n", C.NET_DVR_GetLastError())
-		return
+		return -1
 	}
 	defer C.NET_DVR_Cleanup()
 
@@ -26,7 +26,7 @@ func CapturePicture(channel, port int, ip, username, passwd, saveFile string) {
 	lLoginID := C.NET_DVR_Login_V30(C.CString(ip), C.ushort(port), C.CString(username), C.CString(passwd), (C.LPNET_DVR_DEVICEINFO_V30)(&deviceInfoTmp))
 	if lLoginID == -1 {
 		fmt.Printf("Login to Device failed!\r\n")
-		return
+		return -2
 	}
 
 	//组建jpg结构
@@ -36,7 +36,7 @@ func CapturePicture(channel, port int, ip, username, passwd, saveFile string) {
 
 	if C.NET_DVR_CaptureJPEGPicture(lLoginID, C.int(channel), (C.LPNET_DVR_JPEGPARA)(&JpgPara), C.CString(saveFile)) == 0 {
 		fmt.Printf("抓图失败，错误代码%v\n", C.NET_DVR_GetLastError())
-		return
+		return -3
 	}
 
 	fmt.Printf("抓图成功!\n")
@@ -46,4 +46,5 @@ func CapturePicture(channel, port int, ip, username, passwd, saveFile string) {
 	}
 	lLoginID = -1
 
+	return 0
 }
