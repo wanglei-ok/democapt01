@@ -166,7 +166,7 @@ func UploadFileHandle(c *gin.Context) {
 	name := file.Filename
 
 	if len([]byte(name)) == 0 {
-		c.JSON(400, gin.H{"code": 400, "desc": "not have filename"})
+		c.JSON(400, gin.H{"code": 400, "desc": "filename invalid"})
 		return
 	}
 
@@ -176,7 +176,7 @@ func UploadFileHandle(c *gin.Context) {
 			return
 		}
 	} else {
-		c.JSON(400, gin.H{"code": 400, "desc": "not have uploadfile"})
+		c.JSON(400, gin.H{"code": 400, "desc": "the uploadfile invalid"})
 		return
 	}
 
