@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,41 +28,19 @@ func main() {
 	router.POST("/hls/:stream", HlsPostHandler)
 	router.DELETE("/hls/:stream", HlsDeleteHandler)
 	router.POST("/rtsp2hls/:stream", Rtsp2HlsPostHandler)
-	router.DELETE("/rtsp2hls/:stream", Rtsp2HlsDeleteHandler)
 	router.DELETE("/public/:file", DeleteFile)
 	router.StaticFS("/public", http.Dir("temp"))
-	router.GET("/combine", Combine)
+	router.POST("/combine", Combine)
 	router.GET("/captureJpeg", CaptureJpeg)
-	router.GET("/getfilebytime", GetFileByTime)
+	router.POST("/getfilebytime", GetFileByTimePostHandler)
+	router.GET("/getfilebytime", GetFileByTimeGetHandler)
 	router.POST("/upload", UploadFileHandle)
 	router.Run(":10086")
 }
 
-func Rtsp2HlsDeleteHandler(c *gin.Context) {
-	stream := c.Param("stream")
-
-	v, found := Cache.Get(stream)
-	if found {
-		Cache.Delete(stream)
-		cmd := v.(*exec.Cmd)
-		cmd.Process.Kill()
-		cmd.Wait()
-	}
-
-	if !IsExist(tempPath + stream) {
-		c.JSON(400, gin.H{"code": 400, "desc": "rtsp2hls stream not exists"})
-		return
-	}
-	err := os.RemoveAll(tempPath + stream)
-	if err != nil {
-		c.JSON(400, gin.H{"code": 400, "desc": err.Error()})
-		return
-	}
-	c.JSON(200, gin.H{"code": 200, "desc": "delete rtsp2hls success"})
-}
-
 func Rtsp2HlsPostHandler(c *gin.Context) {
 	url, _ := c.GetPostForm("url")
+	h264, _ := c.GetPostForm("h264")
 	stream := c.Param("stream")
 
 	_, found := Cache.Get(stream)
@@ -71,7 +51,15 @@ func Rtsp2HlsPostHandler(c *gin.Context) {
 	if !IsExist(tempPath + stream) {
 		os.Mkdir(tempPath+stream, 777)
 
-		cmd := exec.Command("ffmpeg", "-y", "-rtsp_transport", "tcp", "-i", url, "-c", "copy", "-f", "hls", "-hls_flags", "delete_segments", tempPath+stream+"/file.m3u8")
+		args := []string{"-y", "-rtsp_transport", "tcp", "-i", url}
+		if h264 != "" {
+			args = append(args, "-force_key_frames", "expr:gte(t,n_forced*2)", "-c:a", "copy", "-c:v", "libx264")
+		} else {
+			args = append(args, "-c", "copy")
+		}
+		args = append(args, "-f", "hls", "-hls_flags", "delete_segments", tempPath+stream+"/file.m3u8")
+
+		cmd := exec.Command("ffmpeg", args...)
 		err := cmd.Start()
 		if err != nil {
 			c.JSON(400, gin.H{"code": 400, "desc": err.Error()})
@@ -85,6 +73,14 @@ func Rtsp2HlsPostHandler(c *gin.Context) {
 
 func HlsDeleteHandler(c *gin.Context) {
 	stream := c.Param("stream")
+	v, found := Cache.Get(stream)
+	if found {
+		Cache.Delete(stream)
+		cmd := v.(*exec.Cmd)
+		cmd.Process.Kill()
+		cmd.Wait()
+	}
+
 	if !IsExist(tempPath + stream) {
 		c.JSON(400, gin.H{"code": 400, "desc": "hls stream not exists"})
 		return
@@ -99,12 +95,21 @@ func HlsDeleteHandler(c *gin.Context) {
 
 func HlsPostHandler(c *gin.Context) {
 	file, _ := c.GetPostForm("file")
+	h264, _ := c.GetPostForm("h264")
 	stream := c.Param("stream")
 
 	if !IsExist(tempPath + stream) {
 		os.Mkdir(tempPath+stream, 777)
 
-		cmd := exec.Command("ffmpeg", "-y", "-i", tempPath+file, "-c", "copy", "-f", "hls", tempPath+stream+"/file.m3u8")
+		args := []string{"-y", "-i", tempPath + file}
+		if h264 != "" {
+			args = append(args, "-force_key_frames", "expr:gte(t,n_forced*2)", "-c:a", "copy", "-c:v", "libx264")
+		} else {
+			args = append(args, "-c", "copy")
+		}
+		args = append(args, "-f", "hls", "-hls_list_size", "30000", tempPath+stream+"/file.m3u8")
+
+		cmd := exec.Command("ffmpeg", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			c.JSON(400, gin.H{"code": 400, "desc": err.Error(), "output": string(out)})
@@ -138,11 +143,16 @@ func DeleteFile(c *gin.Context) {
 }
 
 func Combine(c *gin.Context) {
-	video, _ := c.GetQuery("video")
-	audio, _ := c.GetQuery("audio")
+	video, _ := c.GetPostForm("video")
+	audio, _ := c.GetPostForm("audio")
 
-	outputFile := "out.mp4"
-	cmd := exec.Command("ffmpeg", "-y", "-i", tempPath+video, "-i", tempPath+audio, "-vcodec", "copy", "-acodec", "aac", "-map", "0:v:0", "-map", "1:a:0", tempPath+outputFile)
+	videoExt := filepath.Ext(video)
+	audioExt := filepath.Ext(audio)
+	videoPrefix := video[0 : len(video)-len(videoExt)]
+	audioPrefix := audio[0 : len(audio)-len(audioExt)]
+	outputFile := fmt.Sprintf("%s_%s.mp4", videoPrefix, audioPrefix)
+	cmd := exec.Command("ffmpeg", "-y", "-i", tempPath+video, "-i", tempPath+audio, "-vcodec", "copy",
+		"-acodec", "aac", "-map", "0:v:0", "-map", "1:a:0", tempPath+outputFile)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		c.JSON(400, gin.H{"code": 400, "desc": err.Error(), "output": string(out)})
@@ -173,35 +183,70 @@ func UploadFileHandle(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 200, "desc": "upload success"})
 }
 
-func GetFileByTime(c *gin.Context) {
+func GetFileByTimeGetHandler(c *gin.Context) {
+	file, _ := c.GetQuery("file")
+	v, found := Cache.Get("temp/" + file + ".tmp")
+	if !found {
+		c.JSON(200, gin.H{"code": 200, "desc": "Not found task to downloading"})
+		return
+	}
+	myMap := v.(map[string]any)
+	c.JSON(200, gin.H{"code": 200, "desc": myMap["message"], "nPos": myMap["nPost"]})
+}
+
+func GetFileByTimePostHandler(c *gin.Context) {
 	channel := 1
 	port := 8000
-	if v, ok := c.GetQuery("channel"); ok {
+	if v, ok := c.GetPostForm("channel"); ok {
 		channel, _ = strconv.Atoi(v)
 	}
 
-	if v, ok := c.GetQuery("port"); ok {
+	if v, ok := c.GetPostForm("port"); ok {
 		port, _ = strconv.Atoi(v)
 	}
-	ip, _ := c.GetQuery("ip")
-	username, _ := c.GetQuery("username")
-	password, _ := c.GetQuery("password")
+	ip, _ := c.GetPostForm("ip")
+	username, _ := c.GetPostForm("username")
+	password, _ := c.GetPostForm("password")
 
-	timeCond, _ := c.GetQuery("time")
+	timeCond, _ := c.GetPostForm("time")
 	if len(timeCond) != 28 {
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.JSON(400, gin.H{"code": 400, "desc": "time param invalid"})
 		return
 	}
 
-	saveFile := fmt.Sprintf("temp/download_%v.mp4", timeCond)
-	ret := gohksdk.GetFileByTime(channel, port, ip, username, password, saveFile, timeCond)
-	if ret != 0 {
-		c.AbortWithStatus(http.StatusBadGateway)
+	fileName := fmt.Sprintf("%s_%d_%v.mp4", strings.Replace(ip, ".", "_", -1), channel, timeCond)
+	saveFile := fmt.Sprintf("temp/%s", fileName)
+
+	if IsExist(saveFile) {
+		c.JSON(400, gin.H{"code": 400, "desc": "file exists"})
 		return
 	}
+	go func() {
+		ret := gohksdk.GetFileByTime(channel, port, ip, username, password, saveFile+".tmp", timeCond, func(s string, i int, m string) {
+			Cache.Set(s, map[string]any{"nPost": i, "message": m}, cache.DefaultExpiration)
+		})
+		if ret == 0 {
+			filepath.Walk("temp/", func(path string, info os.FileInfo, err error) error {
+				if strings.Contains(path, fileName) {
+					os.Rename(path, strings.Replace(path, ".tmp", "", -1))
+				}
+				return nil
+			})
 
+		} else {
+			filepath.Walk("temp/", func(path string, info os.FileInfo, err error) error {
+				if strings.Contains(path, fileName) {
+					os.Remove(path)
+				}
+				return nil
+			})
+
+		}
+	}()
+
+	c.JSON(200, gin.H{"code": 200, "desc": "succeed", "file": strings.Replace(saveFile, "temp/", "", -1)})
 	//defer os.Remove(saveFile)
-	c.File(saveFile)
+	//c.File(saveFile)
 }
 
 func CaptureJpeg(c *gin.Context) {

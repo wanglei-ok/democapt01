@@ -51,14 +51,16 @@ func CaptureJpeg(channel, port int, ip, username, passwd, saveFile string) int {
 	return 0
 }
 
-func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond string) int {
+func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond string, n func(string, int, string)) int {
 	if len(timeCond) != 28 {
 		return -3
 	}
 
 	ret := C.NET_DVR_Init()
 	if int(ret) != 1 {
-		fmt.Printf("NET_DVR_Init failed error code = %v\n", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("NET_DVR_Init failed error code = %v", C.NET_DVR_GetLastError())
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -1
 	}
 	defer C.NET_DVR_Cleanup()
@@ -67,7 +69,9 @@ func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond s
 
 	lLoginID := C.NET_DVR_Login_V30(C.CString(ip), C.ushort(port), C.CString(username), C.CString(passwd), (C.LPNET_DVR_DEVICEINFO_V30)(&deviceInfoTmp))
 	if lLoginID == -1 {
-		fmt.Printf("Login to Device failed!\r\n")
+		s := fmt.Sprintf("Login to Device failed!")
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -2
 	}
 	defer C.NET_DVR_Logout_V30(lLoginID)
@@ -103,31 +107,43 @@ func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond s
 
 	hPlayback := C.NET_DVR_GetFileByTime_V40(lLoginID, C.CString(saveFile), &struDownloadCond)
 	if hPlayback < 0 {
-		fmt.Printf("NET_DVR_GetFileByTime_V40 fail,last error %v\n", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("NET_DVR_GetFileByTime_V40 fail,last error %v", C.NET_DVR_GetLastError())
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -4
 	}
 
 	//---------------------------------------
 	//开始下载
 	if C.NET_DVR_PlayBackControl_V40(hPlayback, C.NET_DVR_PLAYSTART, C.LPVOID(C.NULL), C.uint(0), C.LPVOID(C.NULL), (*C.uint)(C.NULL)) == 0 {
-		fmt.Printf("Play back control failed [%v]\n", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("Play back control failed [%v]", C.NET_DVR_GetLastError())
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -5
 	}
 
 	nPos := 0
 	for nPos = 0; nPos < 100 && nPos >= 0; nPos = int(C.NET_DVR_GetDownloadPos(hPlayback)) {
-		fmt.Printf("Be downloading... %d %%\n", nPos)
+		s := fmt.Sprintf("Be downloading... %d %%", nPos)
+		fmt.Println(s)
+		n(saveFile, nPos, s)
 		time.Sleep(1 * time.Second)
 	}
 	if C.NET_DVR_StopGetFile(hPlayback) == 0 {
-		fmt.Printf("failed to stop get file [%v]\n", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("failed to stop get file [%v]", C.NET_DVR_GetLastError())
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -6
 	}
 	if nPos < 0 || nPos > 100 {
-		fmt.Printf("download err [%v]\n", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("download err [%v]", C.NET_DVR_GetLastError())
+		n(saveFile, 0, s)
+		fmt.Println(s)
 		return -7
 	}
-	fmt.Printf("Be downloading... %d %%\n", nPos)
+	s := fmt.Sprintf("The task to finished.")
+	fmt.Println(s)
+	n(saveFile, nPos, s)
 
 	return 0
 }
