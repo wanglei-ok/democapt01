@@ -16,6 +16,12 @@ typedef  unsigned long long UINT64;
 typedef  signed long long   INT64;
 
 #define SERIALNO_LEN            48      //序列号长度
+#define STREAM_ID_LEN   32
+
+#define NET_DVR_PLAYSTART        1//开始播放
+#define NET_DVR_PLAYSTOP        2//停止播放
+#define NET_DVR_PLAYPAUSE        3//暂停播放
+#define NET_DVR_PLAYRESTART        4//恢复播放
 
 //NET_DVR_Login_V30()参数结构
 typedef struct
@@ -135,6 +141,31 @@ typedef struct
     WORD    wPicQuality;            /* 图片质量系数 0-最好 1-较好 2-一般 */
 }NET_DVR_JPEGPARA, *LPNET_DVR_JPEGPARA;
 
+typedef struct
+{
+    DWORD dwYear;        //年
+    DWORD dwMonth;        //月
+    DWORD dwDay;        //日
+    DWORD dwHour;        //时
+    DWORD dwMinute;        //分
+    DWORD dwSecond;        //秒
+}NET_DVR_TIME, *LPNET_DVR_TIME;
+
+typedef struct tagNET_DVR_PLAYCOND
+{
+    DWORD             dwChannel;
+    NET_DVR_TIME     struStartTime;
+    NET_DVR_TIME     struStopTime;
+    BYTE             byDrawFrame;  //0:不抽帧，1：抽帧
+    BYTE             byStreamType ; //码流类型，0-主码流 1-子码流 2-码流三
+    BYTE             byStreamID[STREAM_ID_LEN];
+    BYTE             byCourseFile;    //课程文件0-否，1-是
+    BYTE             byDownload;    //是否下载 0-否，1-是
+    BYTE             byOptimalStreamType;    //是否按最优码流类型回放 0-否，1-是（对于双码流设备，某一段时间内的录像文件与指定码流类型不同，则返回实际码流类型的录像）
+    BYTE             byVODFileType; // 下载录像文件，文件格式 0-PS码流格式，1-3GP格式
+    BYTE             byRes[26];    //保留
+}NET_DVR_PLAYCOND, *LPNET_DVR_PLAYCOND;
+
 
 BOOL NET_DVR_Init();
 BOOL NET_DVR_Cleanup();
@@ -142,6 +173,9 @@ DWORD NET_DVR_GetLastError();
 LONG NET_DVR_Login_V30(char *sDVRIP, WORD wDVRPort, char *sUserName, char *sPassword, LPNET_DVR_DEVICEINFO_V30 lpDeviceInfo);
 BOOL NET_DVR_Logout_V30(LONG lUserID);
 BOOL NET_DVR_CaptureJPEGPicture(LONG lUserID, LONG lChannel, LPNET_DVR_JPEGPARA lpJpegPara, char *sPicFileName);
-
+LONG NET_DVR_GetFileByTime_V40(LONG lUserID, char *sSavedFileName, LPNET_DVR_PLAYCOND  pDownloadCond);
+BOOL NET_DVR_PlayBackControl_V40(LONG lPlayHandle,DWORD dwControlCode, LPVOID lpInBuffer, DWORD dwInLen, LPVOID lpOutBuffer, DWORD *lpOutLen);
+int NET_DVR_GetDownloadPos(LONG lFileHandle);
+BOOL NET_DVR_StopGetFile(LONG lFileHandle);
 
 #endif //_HKSDK_H

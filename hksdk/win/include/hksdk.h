@@ -1,3 +1,5 @@
+#ifndef _HKSDK_H
+#define _HKSDK_H
 
 #define BOOL int
 typedef  unsigned int       DWORD;
@@ -175,3 +177,5 @@ LONG __stdcall NET_DVR_GetFileByTime_V40(LONG lUserID, char *sSavedFileName, LPN
 BOOL __stdcall NET_DVR_PlayBackControl_V40(LONG lPlayHandle,DWORD dwControlCode, LPVOID lpInBuffer, DWORD dwInLen, LPVOID lpOutBuffer, DWORD *lpOutLen);
 int __stdcall NET_DVR_GetDownloadPos(LONG lFileHandle);
 BOOL __stdcall NET_DVR_StopGetFile(LONG lFileHandle);
+
+#endif //_HKSDK_H
