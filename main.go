@@ -49,7 +49,8 @@ func Rtsp2HlsPostHandler(c *gin.Context) {
 		return
 	}
 	if !IsExist(tempPath + stream) {
-		os.Mkdir(tempPath+stream, 777)
+		os.Mkdir(tempPath+stream, 0777)
+		os.Chmod(tempPath+stream, 0777)
 
 		args := []string{"-y", "-rtsp_transport", "tcp", "-i", url}
 		if h264 != "" {
@@ -99,7 +100,8 @@ func HlsPostHandler(c *gin.Context) {
 	stream := c.Param("stream")
 
 	if !IsExist(tempPath + stream) {
-		os.Mkdir(tempPath+stream, 777)
+		os.Mkdir(tempPath+stream, 0777)
+		os.Chmod(tempPath+stream, 0777)
 
 		args := []string{"-y", "-i", tempPath + file}
 		if h264 != "" {
