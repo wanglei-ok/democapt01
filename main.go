@@ -274,7 +274,7 @@ func CaptureJpeg(c *gin.Context) {
 		return
 	}
 
-	//defer os.Remove(saveFile)
+	defer os.Remove(saveFile)
 	c.File(saveFile)
 }
 
