@@ -129,6 +129,7 @@ func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond s
 		n(saveFile, nPos, s)
 		time.Sleep(1 * time.Second)
 	}
+	downloadErr := C.NET_DVR_GetLastError()
 	if C.NET_DVR_StopGetFile(hPlayback) == 0 {
 		s := fmt.Sprintf("failed to stop get file [%v]", C.NET_DVR_GetLastError())
 		n(saveFile, 0, s)
@@ -136,10 +137,10 @@ func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond s
 		return -6
 	}
 	if nPos < 0 || nPos > 100 {
-		s := fmt.Sprintf("download err [%v]", C.NET_DVR_GetLastError())
+		s := fmt.Sprintf("download err [%v]", downloadErr)
 		n(saveFile, 0, s)
 		fmt.Println(s)
-		return -7
+		return 0
 	}
 	s := fmt.Sprintf("The task to finished.")
 	fmt.Println(s)
