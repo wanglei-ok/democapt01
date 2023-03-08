@@ -11,6 +11,7 @@ package gohksdk
 import "C"
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"time"
 )
