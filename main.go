@@ -4,8 +4,11 @@ import (
 	"democapt01/gohksdk"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/xid"
+	"github.com/sirupsen/logrus"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,7 +24,30 @@ const (
 
 var Cache = cache.New(5*time.Minute, 5*time.Minute)
 
+var buildstamp = "no timestamp set"
+var githash = "no githash set"
+
+func logInit() {
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02 15:06:05.0000",
+	})
+
+	logPath, _ := os.Getwd()
+	logName := fmt.Sprintf("%s/democapt01_log.", logPath)
+	r, _ := rotatelogs.New(logName + "%Y%m%d")
+	mw := io.MultiWriter(r, os.Stdout)
+	logrus.SetOutput(mw)
+}
+
 func main() {
+	logInit()
+
+	logrus.Info("Start service")
+	logrus.Info("Git Commit hash:", githash)
+	logrus.Info("Build Timestamp:", buildstamp)
+
 	gin.SetMode(gin.DebugMode)
 	router := gin.Default()
 	router.Use(cors())
@@ -224,17 +250,24 @@ func GetFileByTimePostHandler(c *gin.Context) {
 		return
 	}
 	go func() {
-		ret := gohksdk.GetFileByTime(channel, port, ip, username, password, saveFile+".tmp", timeCond, func(s string, i int, m string) {
+		notifyFunc := func(s string, i int, m string) {
 			Cache.Set(s, map[string]any{"nPost": i, "message": m}, cache.DefaultExpiration)
-		})
+		}
+
+		ret := gohksdk.GetFileByTime(channel, port, ip, username, password, saveFile+".tmp", timeCond, notifyFunc)
+		//for test time.Sleep(time.Second * 5)
 		if ret == 0 {
 			filepath.Walk("temp/", func(path string, info os.FileInfo, err error) error {
 				if strings.Contains(path, fileName) {
-					os.Rename(path, strings.Replace(path, ".tmp", "", -1))
+					newPath := strings.Replace(path, ".tmp", "", -1)
+					logrus.Debug(fmt.Sprintf("rename: %s -> %s", path, newPath))
+					if !strings.EqualFold(path, newPath) {
+						os.Rename(path, newPath)
+					}
 				}
 				return nil
 			})
-
+			notifyFunc(saveFile+".tmp", 100, "rename completed.")
 		} else {
 			filepath.Walk("temp/", func(path string, info os.FileInfo, err error) error {
 				if strings.Contains(path, fileName) {

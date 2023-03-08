@@ -11,6 +11,7 @@ package gohksdk
 import "C"
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"time"
 )
@@ -52,26 +53,30 @@ func CaptureJpeg(channel, port int, ip, username, passwd, saveFile string) int {
 }
 
 func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond string, n func(string, int, string)) int {
+	logrus.Debug("GetFileByTime entry")
+	defer logrus.Debug("GetFileByTime leave")
+
 	if len(timeCond) != 28 {
 		return -3
 	}
-
+	logrus.Debug("NET_DVR_Init")
 	ret := C.NET_DVR_Init()
 	if int(ret) != 1 {
 		s := fmt.Sprintf("NET_DVR_Init failed error code = %v", C.NET_DVR_GetLastError())
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return -1
 	}
 	defer C.NET_DVR_Cleanup()
 
 	var deviceInfoTmp C.NET_DVR_DEVICEINFO_V30
 
+	logrus.Debug(fmt.Sprintf("NET_DVR_Login_V30, %s, %d, %s, %s", ip, port, username, passwd))
 	lLoginID := C.NET_DVR_Login_V30(C.CString(ip), C.ushort(port), C.CString(username), C.CString(passwd), (C.LPNET_DVR_DEVICEINFO_V30)(&deviceInfoTmp))
 	if lLoginID == -1 {
 		s := fmt.Sprintf("Login to Device failed!")
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return -2
 	}
 	defer C.NET_DVR_Logout_V30(lLoginID)
@@ -105,46 +110,53 @@ func GetFileByTime(channel, port int, ip, username, passwd, saveFile, timeCond s
 	t, _ = strconv.Atoi(timeCond[26:28])
 	struDownloadCond.struStopTime.dwSecond = C.uint(t)
 
+	logrus.Debug("NET_DVR_GetFileByTime_V40", saveFile, struDownloadCond)
 	hPlayback := C.NET_DVR_GetFileByTime_V40(lLoginID, C.CString(saveFile), &struDownloadCond)
 	if hPlayback < 0 {
 		s := fmt.Sprintf("NET_DVR_GetFileByTime_V40 fail,last error %v", C.NET_DVR_GetLastError())
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return -4
 	}
 
 	//---------------------------------------
 	//开始下载
+	logrus.Debug("NET_DVR_PlayBackControl_V40")
 	if C.NET_DVR_PlayBackControl_V40(hPlayback, C.NET_DVR_PLAYSTART, C.LPVOID(C.NULL), C.uint(0), C.LPVOID(C.NULL), (*C.uint)(C.NULL)) == 0 {
 		s := fmt.Sprintf("Play back control failed [%v]", C.NET_DVR_GetLastError())
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return -5
 	}
 
 	nPos := 0
+	logrus.Debug("NET_DVR_GetDownloadPos")
 	for nPos = 0; nPos < 100 && nPos >= 0; nPos = int(C.NET_DVR_GetDownloadPos(hPlayback)) {
 		s := fmt.Sprintf("Be downloading... %d %%", nPos)
-		fmt.Println(s)
+		logrus.Debug(s)
 		n(saveFile, nPos, s)
 		time.Sleep(1 * time.Second)
 	}
+	strPos := fmt.Sprintf("Be downloading... %d %%", nPos)
+	logrus.Debug(strPos)
+
 	downloadErr := C.NET_DVR_GetLastError()
+	logrus.Debug("NET_DVR_StopGetFile")
 	if C.NET_DVR_StopGetFile(hPlayback) == 0 {
 		s := fmt.Sprintf("failed to stop get file [%v]", C.NET_DVR_GetLastError())
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return -6
 	}
 	if nPos < 0 || nPos > 100 {
 		s := fmt.Sprintf("download err [%v]", downloadErr)
 		n(saveFile, 0, s)
-		fmt.Println(s)
+		logrus.Debug(s)
 		return 0
 	}
 	s := fmt.Sprintf("The task to finished.")
-	fmt.Println(s)
-	n(saveFile, nPos, s)
+	logrus.Debug(s)
 
+	n(saveFile, nPos, s)
 	return 0
 }
